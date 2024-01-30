@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sand Simulation</title>
+  </head>
+  <body>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        background-color: #333;
+      }
+      label {
+        color: white;
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+    </style>
+    <div>
+      <label>Spawn Size</label>
+      <input type="range" min="1" max="10" value="1" id="spawn-size" />
+    </div>
+    <canvas id="canvas"></canvas>
+    <div>
+      <label>Inactive: </label><label id="inactive-count">0</label
+      ><label>, Active: </label><label id="active-count">0</label>
+    </div>
+    <div>
+      <label>Show inactive particles</label>
+      <input type="checkbox" id="show-inactive" />
+    </div>
+
+    <script>
+      const width = 600;
+      const height = 500;
+      let mouseActive = false;
+
+      const spawnSize = document.getElementById("spawn-size");
+      const showInactive = document.getElementById("show-inactive");
+      const inactiveCount = document.getElementById("inactive-count");
+      const activeCount = document.getElementById("active-count");
+      const canvas = document.getElementById("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      const obstacles = [
+        { x: 0, y: 0, width: 10, height: height, type: "rectangle" },
+        { x: 0, y: 0, width: width, height: 10, type: "rectangle" },
+        { x: width - 10, y: 0, width: 10, height: height, type: "rectangle" },
+        { x: 0, y: height - 10, width: width, height: 10, type: "rectangle" },
+        { x: 200, y: 200, width: 80, height: 10, type: "rectangle" },
+        { x: 200, y: 200, width: 10, height: 100, type: "rectangle" },
+        { x: 260, y: 260, width: 90, height: 10, type: "rectangle" },
+        { x: 460, y: 160, radius: 33, type: "circle" },
+        { x: 70, y: 460, radius: 50, type: "circle" },
+        { x: 460, y: 400, radius: 10, type: "circle" },
+        { x: 430, y: 420, radius: 10, type: "circle" },
+        { x: 440, y: 430, radius: 10, type: "circle" },
+        { x: 460, y: 450, radius: 15, type: "circle" },
+        { points: [{x: 30, y:30},{x: 50, y:50},{x: 30, y:50}], type: "shape" },
+        { points: [{x: 350, y:350},{x: 360, y:360},{x: 300, y:440},{x: 290, y:430}], type: "shape" },
+        { points: [{x: 220, y:350},{x: 210, y:360},{x: 270, y:440},{x: 280, y:430}], type: "shape" },
+      ];
+      let activeParticles = [];
+      let inactiveParticles = [];
+
+      function gameLoop() {
+        // Clear canvas
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw obstacles
+        for (let i = 0; i < obstacles.length; i++) {
+          ctx.fillStyle = "gray";
+
+          if (obstacles[i].type == "rectangle") {
+            ctx.fillRect(
+              obstacles[i].x,
+              obstacles[i].y,
+              obstacles[i].width,
+              obstacles[i].height
+            );
+          } else if (obstacles[i].type == "circle") {
+            ctx.beginPath();
+            ctx.arc(
+              obstacles[i].x,
+              obstacles[i].y,
+              obstacles[i].radius,
+              0,
+              2 * Math.PI
+            );
+            ctx.fill();
+          } else if (obstacles[i].type == "shape") {
+            ctx.beginPath();
+            ctx.moveTo(obstacles[i].points[0].x, obstacles[i].points[0].y);
+            for (j = 1; j < obstacles[i].points.length; j++) {
+              ctx.lineTo(obstacles[i].points[j].x, obstacles[i].points[j].y);
+            }
+            ctx.fill();
+          }
+        }
+
+        // Draw inactive particles
+        for (let i = 0; i < inactiveParticles.length; i++) {
+          ctx.fillStyle = showInactive.checked
+            ? "rgba(255, 5, 5, 1)"
+            : "rgba(255, 102, 5, 1)";
+          ctx.fillRect(inactiveParticles[i].x, inactiveParticles[i].y, 1, 1);
+        }
+
+        // Calculate particle physics and draw
+        for (let i = 0; i < activeParticles.length; i++) {
+          const pixelColorBelow = ctx.getImageData(
+            activeParticles[i].x,
+            activeParticles[i].y + 1,
+            1,
+            1
+          ).data;
+          const pixelColorLeftBelow = ctx.getImageData(
+            activeParticles[i].x - 1,
+            activeParticles[i].y + 1,
+            1,
+            1
+          ).data;
+          const pixelColorRightBelow = ctx.getImageData(
+            activeParticles[i].x + 1,
+            activeParticles[i].y + 1,
+            1,
+            1
+          ).data;
+          const freeBelow = pixelColorBelow[0] == 0;
+          const freeLeftBelow = pixelColorLeftBelow[0] == 0;
+          const freeRightBelow = pixelColorRightBelow[0] == 0;
+
+          // Check if particle can move
+          if (!freeBelow && !freeLeftBelow && !freeRightBelow) {
+            ctx.fillStyle = "rgba(255, 101, 5, 1)";
+            ctx.fillRect(activeParticles[i].x, activeParticles[i].y, 1, 1);
+
+            const couldBeFreeBelow =
+              pixelColorBelow[0] == 255 && pixelColorBelow[1] == 101;
+            const couldBeFreeLeftBelow =
+              pixelColorLeftBelow[0] == 255 && pixelColorLeftBelow[1] == 101;
+            const couldBeFreeRightBelow =
+              pixelColorRightBelow[0] == 255 && pixelColorRightBelow[1] == 101;
+            if (
+              !couldBeFreeBelow &&
+              !couldBeFreeLeftBelow &&
+              !couldBeFreeRightBelow
+            ) {
+              inactiveParticles.push(activeParticles[i]);
+              activeParticles.splice(i, 1);
+              i--;
+            }
+
+            continue;
+          } else if (!freeBelow && freeLeftBelow && freeRightBelow) {
+            if (Math.random() < 0.5) {
+              activeParticles[i].x--;
+            } else {
+              activeParticles[i].x++;
+            }
+          } else if (!freeBelow && freeLeftBelow) {
+            activeParticles[i].x--;
+          } else if (!freeBelow && freeRightBelow) {
+            activeParticles[i].x++;
+          }
+
+          // Move particle down
+          activeParticles[i].y++;
+          ctx.fillStyle = "rgba(255, 101, 5, 1)";
+          ctx.fillRect(activeParticles[i].x, activeParticles[i].y, 1, 1);
+        }
+
+        inactiveCount.innerHTML = inactiveParticles.length;
+        activeCount.innerHTML = activeParticles.length;
+
+        setTimeout(gameLoop, 10);
+      }
+
+      canvas.addEventListener("mousedown", function (event) {
+        mouseActive = true;
+        const mouseMoveEvent = new MouseEvent("mousemove", {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+        canvas.dispatchEvent(mouseMoveEvent);
+      });
+
+      canvas.addEventListener("mouseup", function (event) {
+        mouseActive = false;
+      });
+
+      canvas.addEventListener("mouseleave", function (event) {
+        mouseActive = false;
+      });
+
+      canvas.addEventListener("mousemove", function (event) {
+        // Check if placing not possible
+        let pixelColor = ctx.getImageData(
+          event.offsetX,
+          event.offsetY,
+          1,
+          1
+        ).data;
+        if (
+          !mouseActive ||
+          (pixelColor[0] != 0 && pixelColor[1] != 0 && pixelColor[2] != 0)
+        ) {
+          return;
+        }
+
+        let spawnCount = 0;
+        let maxRuns = spawnSize.value * 2;
+        while (spawnCount < spawnSize.value - 1) {
+          maxRuns--;
+          if (maxRuns < 0) {
+            break;
+          }
+
+          const randX = Math.floor(Math.random() * spawnSize.value/2) + 1;
+          const randY = Math.floor(Math.random() * spawnSize.value/2) + 1;
+          pixelColor = ctx.getImageData(
+            event.offsetX + randX,
+            event.offsetY + randY,
+            1,
+            1
+          ).data;
+
+          if (pixelColor[0] != 0 && pixelColor[1] != 0 && pixelColor[2] != 0) {
+            continue;
+          }
+
+          activeParticles.push({
+            x: event.offsetX + randX,
+            y: event.offsetY + randY,
+          });
+
+          spawnCount++;
+        }
+
+        activeParticles.push({
+          x: event.offsetX,
+          y: event.offsetY,
+        });
+      });
+
+      gameLoop();
+    </script>
+  </body>
+</html>
